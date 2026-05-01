@@ -7,15 +7,15 @@
     "start": "node index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
-    "pino": "latest",
-    "ws": "latest",
+    "@whiskeysockets/baileys": "^6.7.7",
+    "pino": "^8.17.2",
+    "ws": "^8.18.0",
     "node-fetch": "2.6.7",
-    "node-cron": "latest",
-    "fs-extra": "latest",
-    "qrcode-terminal": "latest"
+    "node-cron": "^3.0.3",
+    "fs-extra": "^11.2.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
