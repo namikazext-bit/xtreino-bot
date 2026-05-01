@@ -1,12 +1,19 @@
 {
   "name": "xtreino-bot-pro",
-  "version": "3.0.0",
-  "description": "Bot WhatsApp para treinos e slots - Railway Ready",
+  "version": "4.0.0",
+  "description": "Bot WhatsApp profissional para treinos, slots, filas e gerenciamento de salas - GitHub + Railway Ready",
   "main": "index.js",
   "type": "commonjs",
+  "private": true,
+  "license": "MIT",
+  "author": "XTREINO BOT PRO",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "restart": "npm install && node index.js",
+    "clean": "rm -rf node_modules package-lock.json session",
+    "reinstall": "rm -rf node_modules package-lock.json && npm install",
+    "railway": "npm install && npm start"
   },
   "engines": {
     "node": "18.x",
@@ -19,6 +26,22 @@
     "node-fetch": "2.6.7",
     "node-cron": "^3.0.3",
     "fs-extra": "^11.2.0",
-    "qrcode-terminal": "^0.12.0"
-  }
+    "qrcode-terminal": "^0.12.0",
+    "axios": "^1.7.2",
+    "moment-timezone": "^0.5.45",
+    "dotenv": "^16.4.5"
+  },
+  "overrides": {
+    "node-fetch": "2.6.7"
+  },
+  "keywords": [
+    "whatsapp-bot",
+    "baileys",
+    "railway",
+    "freefire",
+    "treino",
+    "slots",
+    "bot",
+    "nodejs"
+  ]
 }
