@@ -16,7 +16,7 @@ async function startBot() {
     const { connection, qr } = update
 
     if (qr) {
-      console.log('📱 ESCANEIE O QR ABAIXO:')
+      console.log('📱 ESCANEIE O QR:')
       qrcode.generate(qr, { small: true })
     }
 
