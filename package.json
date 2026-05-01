@@ -1,17 +1,14 @@
 {
-  "name": "xtreino-bot-pro",
-  "version": "2.0.0",
+  "name": "xtreino-bot",
+  "version": "1.0.0",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
-    "pino": "latest",
-    "ws": "latest",
-    "node-fetch": "latest",
-    "node-cron": "latest",
-    "fs-extra": "latest"
+    "@whiskeysockets/baileys": "^6.7.0",
+    "pino": "^8.0.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
