@@ -14,4 +14,4 @@
     "node-cron": "latest",
     "fs-extra": "latest"
   }
-      }
+}
