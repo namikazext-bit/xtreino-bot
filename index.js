@@ -1,79 +1,32 @@
-// ===============================
-// XTREINO BOT PRO V3 - RAILWAY READY
-// ===============================
-
-// ===== IMPORTS =====
-const baileys = require('@whiskeysockets/baileys')
-const makeWASocket = baileys.default
-const { useMultiFileAuthState, DisconnectReason } = baileys
-
+const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys')
 const P = require('pino')
-const cron = require('node-cron')
+const QRCode = require('qrcode')
 const fs = require('fs-extra')
-const qrcode = require('qrcode-terminal')
 
-const fetch = require('node-fetch')
-global.fetch = fetch
-
-// ===== CONFIG =====
-
-// COLOQUE SEU NÚMERO AQUI
-const ADM = ['5567999999999@s.whatsapp.net']
-
+// ===== BANCO =====
 const DB_FILE = './db.json'
 
-// ===== ESTADO =====
 let db = {
   slots: [],
   fila: [],
-  banidos: [],
   aberto: true,
   idSala: '',
   senhaSala: '',
-  grupoId: ''
+  ranking: {}
 }
-
-// ===== DB =====
 
 function loadDB() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      db = fs.readJsonSync(DB_FILE)
-    }
-  } catch (err) {
-    console.log('Erro ao carregar DB:', err)
-  }
+  if (fs.existsSync(DB_FILE)) db = fs.readJsonSync(DB_FILE)
 }
-
 function saveDB() {
-  try {
-    fs.writeJsonSync(DB_FILE, db, { spaces: 2 })
-  } catch (err) {
-    console.log('Erro ao salvar DB:', err)
-  }
+  fs.writeJsonSync(DB_FILE, db, { spaces: 2 })
 }
 
-// ===== FUNÇÕES =====
-
-function isAdmin(sender) {
-  return ADM.includes(sender)
-}
-
-function resetDB() {
-  db = {
-    slots: [],
-    fila: [],
-    banidos: [],
-    aberto: true,
-    idSala: '',
-    senhaSala: '',
-    grupoId: ''
-  }
-  saveDB()
-}
+// ===== CONFIG =====
+const ADM = ['SEU_NUMERO@s.whatsapp.net']
+const isAdmin = (sender) => ADM.includes(sender)
 
 // ===== BOT =====
-
 async function startBot() {
   loadDB()
 
@@ -81,103 +34,20 @@ async function startBot() {
 
   const sock = makeWASocket({
     logger: P({ level: 'silent' }),
-    auth: state,
-    printQRInTerminal: false
+    auth: state
   })
 
   sock.ev.on('creds.update', saveCreds)
 
-  // ===== CONEXÃO =====
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update
-
+  sock.ev.on('connection.update', async ({ connection, qr }) => {
     if (qr) {
-      console.log('\n📱 ESCANEIE O QR CODE ABAIXO:\n')
-      qrcode.generate(qr, { small: true })
+      console.log('📱 ESCANEIE O QR:')
+      console.log(await QRCode.toDataURL(qr))
     }
-
-    if (connection === 'close') {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-
-      console.log('❌ Conexão fechada')
-
-      if (shouldReconnect) {
-        console.log('🔁 Reconectando...')
-        startBot()
-      }
-    }
-
     if (connection === 'open') {
-      console.log('✅ BOT ONLINE COM SUCESSO')
+      console.log('✅ BOT ONLINE')
     }
   })
-
-  // ===============================
-  // CRON AUTOMÁTICO
-  // ===============================
-
-  // 19:30 abre inscrições
-  cron.schedule('30 19 * * *', async () => {
-    db.aberto = true
-    saveDB()
-
-    if (db.grupoId) {
-      await sock.sendMessage(db.grupoId, {
-        text: '✅ INSCRIÇÕES ABERTAS!\n\nUse: !line NomeDaSuaLine'
-      })
-    }
-
-    console.log('✅ Inscrições abertas')
-  })
-
-  // 19:58 fecha e remove faltantes
-  cron.schedule('58 19 * * *', async () => {
-    db.aberto = false
-
-    const removidos = db.slots.filter(s => !s.confirm)
-    db.slots = db.slots.filter(s => s.confirm)
-
-    removidos.forEach(r => {
-      if (!db.banidos.includes(r.nome)) {
-        db.banidos.push(r.nome)
-      }
-    })
-
-    saveDB()
-
-    if (db.grupoId) {
-      await sock.sendMessage(db.grupoId, {
-        text:
-          `❌ AUSENTES REMOVIDOS:\n\n${
-            removidos.length
-              ? removidos.map(r => `• ${r.nome}`).join('\n')
-              : 'Nenhum'
-          }`
-      })
-    }
-
-    console.log('❌ Fechamento realizado')
-  })
-
-  // 20:00 envia sala
-  cron.schedule('0 20 * * *', async () => {
-    if (db.grupoId) {
-      await sock.sendMessage(db.grupoId, {
-        text:
-          `🚀 GO TREINO!\n\n` +
-          `🎮 ID: ${db.idSala || 'Não definido'}\n` +
-          `🔐 SENHA: ${db.senhaSala || 'Não definida'}`
-      })
-    }
-
-    console.log('🚀 Sala enviada')
-  })
-
-  // ===============================
-  // MENSAGENS
-  // ===============================
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     try {
@@ -186,227 +56,159 @@ async function startBot() {
 
       const from = msg.key.remoteJid
       const sender = msg.key.participant || from
-
       const text =
         msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ''
+        msg.message.extendedTextMessage?.text
 
-      if (!text.startsWith('!')) return
+      if (!text || !text.startsWith('!')) return
 
-      console.log(`📩 ${sender}: ${text}`)
+      // ===== MENU =====
+      if (text === '!menu') {
+        return sock.sendMessage(from, {
+          text:
+`🤖 MENU X-TREINO
 
-      // ===============================
-      // !idgrupo
-      // ===============================
+📌 INSCRIÇÃO
+!line nome
+!slots
+!fila
+!sair
 
-      if (text === '!idgrupo') {
-        return await sock.sendMessage(from, {
-          text: `📌 ID DO GRUPO:\n${from}`
+📌 PRESENÇA
+!check
+!presenca
+
+📌 SALA
+!sala ID SENHA
+!go
+
+📌 ADMIN
+!abrir
+!fechar
+!ban slot X
+!reset
+
+📌 RANKING
+!kill nome X
+!ranking`
         })
       }
 
-      // ===============================
-      // !setgrupo
-      // ===============================
-
-      if (text === '!setgrupo' && isAdmin(sender)) {
-        db.grupoId = from
-        saveDB()
-
-        return await sock.sendMessage(from, {
-          text: '✅ Grupo principal definido com sucesso'
-        })
-      }
-
-      // ===============================
-      // !sala ID SENHA
-      // ===============================
-
-      if (text.startsWith('!sala') && isAdmin(sender)) {
-        const args = text.split(' ')
-
-        if (!args[1] || !args[2]) {
-          return await sock.sendMessage(from, {
-            text: 'Use:\n!sala ID SENHA'
-          })
-        }
-
-        db.idSala = args[1]
-        db.senhaSala = args[2]
-
-        saveDB()
-
-        return await sock.sendMessage(from, {
-          text: '🎮 Sala configurada com sucesso'
-        })
-      }
-
-      // ===============================
-      // !line Nome
-      // ===============================
-
+      // ===== LINE =====
       if (text.startsWith('!line')) {
-        if (!db.aberto) {
-          return await sock.sendMessage(from, {
-            text: '❌ Inscrições fechadas'
-          })
-        }
+        if (!db.aberto) return
 
-        const nome = text.replace('!line', '').trim()
-
-        if (!nome) {
-          return await sock.sendMessage(from, {
-            text: 'Use:\n!line NomeDaLine'
-          })
-        }
-
-        if (db.banidos.includes(nome)) {
-          return await sock.sendMessage(from, {
-            text: '🚫 Sua line está banida'
-          })
-        }
-
-        if (db.slots.find(s => s.nome === nome)) {
-          return await sock.sendMessage(from, {
-            text: '⚠️ Essa line já está inscrita'
-          })
-        }
-
-        if (db.fila.find(s => s.nome === nome)) {
-          return await sock.sendMessage(from, {
-            text: '⚠️ Essa line já está na fila'
-          })
-        }
+        let nome = text.replace('!line', '').trim()
+        if (!nome) return
 
         if (db.slots.length < 12) {
-          db.slots.push({
-            nome,
-            confirm: false,
-            dono: sender
-          })
-
+          db.slots.push({ nome, dono: sender, confirm: false })
           saveDB()
-
-          return await sock.sendMessage(from, {
-            text: '✅ INSCRITO NOS SLOTS'
-          })
+          return sock.sendMessage(from, { text: `✅ SLOT ${db.slots.length}` })
         } else {
-          db.fila.push({
-            nome,
-            dono: sender
-          })
-
+          db.fila.push({ nome, dono: sender })
           saveDB()
-
-          return await sock.sendMessage(from, {
-            text: '🕐 Adicionado à FILA DE ESPERA'
-          })
+          return sock.sendMessage(from, { text: `🕒 Fila ${db.fila.length}` })
         }
       }
 
-      // ===============================
-      // !check
-      // ===============================
+      // ===== SLOTS =====
+      if (text === '!slots') {
+        let lista = db.slots.map((s, i) =>
+          `${i + 1}. ${s.nome} ${s.confirm ? '✅' : '❌'}`
+        ).join('\n')
+        return sock.sendMessage(from, { text: lista || 'Vazio' })
+      }
 
+      // ===== FILA =====
+      if (text === '!fila') {
+        let lista = db.fila.map((f, i) => `${i + 1}. ${f.nome}`).join('\n')
+        return sock.sendMessage(from, { text: lista || 'Fila vazia' })
+      }
+
+      // ===== CHECK =====
       if (text === '!check') {
-        const team = db.slots.find(s => s.dono === sender)
-
-        if (!team) {
-          return await sock.sendMessage(from, {
-            text: '❌ Você não está nos slots'
-          })
-        }
-
+        let team = db.slots.find(s => s.dono === sender)
+        if (!team) return
         team.confirm = true
         saveDB()
+        return sock.sendMessage(from, { text: '✅ Confirmado' })
+      }
 
-        return await sock.sendMessage(from, {
-          text: '✅ PRESENÇA CONFIRMADA'
+      // ===== PRESENÇA =====
+      if (text === '!presenca') {
+        let ok = db.slots.filter(s => s.confirm).map(s => s.nome)
+        let no = db.slots.filter(s => !s.confirm).map(s => s.nome)
+
+        return sock.sendMessage(from, {
+          text:
+`✅ CONFIRMADOS:
+${ok.join('\n') || 'Nenhum'}
+
+❌ AUSENTES:
+${no.join('\n') || 'Nenhum'}`
         })
       }
 
-      // ===============================
-      // !slots
-      // ===============================
-
-      if (text === '!slots') {
-        const lista = db.slots.length
-          ? db.slots.map((s, i) =>
-              `${i + 1}. ${s.nome} ${s.confirm ? '✅' : '❌'}`
-            ).join('\n')
-          : 'Nenhum slot ocupado'
-
-        return await sock.sendMessage(from, {
-          text: `📋 SLOTS:\n\n${lista}`
-        })
-      }
-
-      // ===============================
-      // !fila
-      // ===============================
-
-      if (text === '!fila') {
-        const lista = db.fila.length
-          ? db.fila.map((s, i) =>
-              `${i + 1}. ${s.nome}`
-            ).join('\n')
-          : 'Fila vazia'
-
-        return await sock.sendMessage(from, {
-          text: `🕐 FILA:\n\n${lista}`
-        })
-      }
-
-      // ===============================
-      // !ban 3
-      // ===============================
-
+      // ===== BAN =====
       if (text.startsWith('!ban') && isAdmin(sender)) {
-        const num = parseInt(text.split(' ')[1])
+        let num = parseInt(text.split(' ')[2])
+        if (!num || !db.slots[num - 1]) return
 
-        if (!num || !db.slots[num - 1]) {
-          return await sock.sendMessage(from, {
-            text: 'Use:\n!ban número'
-          })
-        }
-
-        const removido = db.slots.splice(num - 1, 1)[0]
-
-        if (!db.banidos.includes(removido.nome)) {
-          db.banidos.push(removido.nome)
-        }
+        let removido = db.slots.splice(num - 1, 1)[0]
 
         if (db.fila.length > 0) {
-          const novo = db.fila.shift()
-
-          db.slots.push({
-            ...novo,
-            confirm: false
-          })
+          let novo = db.fila.shift()
+          db.slots.push({ ...novo, confirm: false })
         }
 
         saveDB()
+        return sock.sendMessage(from, { text: `🚫 ${removido.nome}` })
+      }
 
-        return await sock.sendMessage(from, {
-          text: `🚫 ${removido.nome} foi banido`
+      // ===== SALA =====
+      if (text.startsWith('!sala') && isAdmin(sender)) {
+        let args = text.split(' ')
+        db.idSala = args[1]
+        db.senhaSala = args[2]
+        saveDB()
+
+        return sock.sendMessage(from, {
+          text: `🎮 Sala:\nID: ${db.idSala}\nSenha: ${db.senhaSala}`
         })
       }
 
-      // ===============================
-      // !reset
-      // ===============================
-
-      if (text === '!reset' && isAdmin(sender)) {
-        resetDB()
-
-        return await sock.sendMessage(from, {
-          text: '♻️ BOT RESETADO COM SUCESSO'
+      // ===== GO =====
+      if (text === '!go') {
+        return sock.sendMessage(from, {
+          text: `🚀 GO\nID: ${db.idSala}\nSenha: ${db.senhaSala}`
         })
       }
 
-    } catch (err) {
-      console.log('ERRO:', err)
+      // ===== RANKING =====
+      if (text.startsWith('!kill')) {
+        let args = text.split(' ')
+        let nome = args[1]
+        let pontos = parseInt(args[2])
+
+        if (!db.ranking[nome]) db.ranking[nome] = 0
+        db.ranking[nome] += pontos
+
+        saveDB()
+        return sock.sendMessage(from, { text: `+${pontos} kills ${nome}` })
+      }
+
+      if (text === '!ranking') {
+        let lista = Object.entries(db.ranking)
+          .sort((a, b) => b[1] - a[1])
+          .map(([n, p], i) => `${i + 1}. ${n} - ${p}`)
+          .join('\n')
+
+        return sock.sendMessage(from, { text: lista || 'Sem dados' })
+      }
+
+    } catch (e) {
+      console.log(e)
     }
   })
 }
