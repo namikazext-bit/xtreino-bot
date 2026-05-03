@@ -1,17 +1,52 @@
-const { state, saveCreds } = await useMultiFileAuthState('session')
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    delay, 
+    PHONENUMBER_MCC 
+} = require("@whiskeysockets/baileys");
+const pino = require("pino");
 
-const sock = makeWASocket({
-  logger: P({ level: 'silent' }),
-  auth: state
-})
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('session');
 
-sock.ev.on('creds.update', saveCreds)
+    const sock = makeWASocket({
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        // Isso impede que o bot tente gerar QR Code no terminal do Railway
+        browser: ["Ubuntu", "Chrome", "20.0.04"]
+    });
 
-// 🔥 FORÇAR CÓDIGO SEMPRE QUE NÃO ESTIVER CONECTADO
-setTimeout(async () => {
-  if (!sock.user) {
-    const numero = "55SEUNUMERO" // ex: 556799999999
-    const code = await sock.requestPairingCode(numero)
-    console.log(`📱 CÓDIGO: ${code}`)
-  }
-}, 3000)
+    // Lógica para Pareamento por Código
+    // Verificamos se não há credenciais registradas (primeiro acesso)
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = "55XXXXXXXXXXX"; // Substitua pelo seu número com DDD
+
+        // Um pequeno delay garante que o socket esteja pronto para a requisição
+        await delay(5000); 
+
+        try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            console.log(`\n=========================================`);
+            console.log(`📱 SEU CÓDIGO DE PAREAMENTO: ${code}`);
+            console.log(`=========================================\n`);
+        } catch (error) {
+            console.error("Erro ao solicitar código de pareamento:", error);
+        }
+    }
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            console.log("Conexão fechada, tentando reconectar...");
+            connectToWhatsApp();
+        } else if (connection === 'open') {
+            console.log("✅ Bot conectado com sucesso!");
+        }
+    });
+
+    return sock;
+}
+
+connectToWhatsApp();
