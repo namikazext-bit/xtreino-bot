@@ -1,7 +1,7 @@
 {
-  "name": "bot-xtreino-master",
-  "version": "1.1.0",
-  "description": "Bot Profissional de X-Treino",
+  "name": "bot-xtreino-android",
+  "version": "1.0.0",
+  "description": "Bot automatizado para Free Fire",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -11,5 +11,8 @@
     "pino": "^9.0.0",
     "fs-extra": "^11.1.1",
     "moment-timezone": "^0.5.43"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
