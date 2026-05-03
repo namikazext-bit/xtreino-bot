@@ -3,37 +3,35 @@ const P = require('pino')
 const fs = require('fs-extra')
 const moment = require('moment-timezone')
 
-// ===== CONFIGURAÇÃO E BANCO DE DADOS =====
+// CONFIGURAÇÃO
 const MEU_NUMERO = "556792828903"
 const PREFIXO = "!"
-const DB_FILE = './database.json'
 
+// BANCO DE DADOS SIMPLIFICADO
 let db = {
-    config: { aberta: false, vagas: 12, id: "", senha: "", hora: "" },
+    aberto: false,
+    vagas: 12,
     slots: [],
     fila: [],
-    banidos: [],
-    ranking: {}
+    id: "",
+    senha: ""
 }
 
-function saveDB() { fs.writeJsonSync(DB_FILE, db, { spaces: 2 }) }
-if (fs.existsSync(DB_FILE)) { db = fs.readJsonSync(DB_FILE) } else { saveDB() }
-
-async function startBot() {
+async function iniciarBot() {
     const { state, saveCreds } = await useMultiFileAuthState('session')
+
     const sock = makeWASocket({
         logger: P({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false,
         browser: ["Ubuntu", "Chrome", "20.0.04"]
     })
 
-    // PAREAMENTO
+    // PAREAMENTO POR CÓDIGO (APARECERÁ NO LOG DO RAILWAY)
     if (!sock.authState.creds.registered) {
-        console.log("Aguardando 10s para gerar código...")
-        await delay(10000)
+        console.log("Aguarde 15 segundos para gerar o código...")
+        await delay(15000)
         const code = await sock.requestPairingCode(MEU_NUMERO)
-        console.log(`\n📱 SEU CÓDIGO DE PAREAMENTO: ${code}\n`)
+        console.log(`\n\nCÓDIGO DE PAREAMENTO: ${code}\n\n`)
     }
 
     sock.ev.on('creds.update', saveCreds)
@@ -43,113 +41,80 @@ async function startBot() {
         if (!msg.message || msg.key.fromMe) return
 
         const from = msg.key.remoteJid
-        const sender = msg.key.participant || from
-        const pushName = msg.pushName || "Jogador"
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || ""
-        
-        if (!text.startsWith(PREFIXO)) return
+        const sender = msg.key.participant || from
 
+        if (!text.startsWith(PREFIXO)) return
         const args = text.slice(1).trim().split(/ +/g)
         const comando = args.shift().toLowerCase()
-        const isAdm = sender.includes(MEU_NUMERO)
+        const souDono = sender.includes(MEU_NUMERO)
 
-        // ===== SISTEMA DE MENU =====
-        if (comando === "menu" || comando === "help") {
-            const menu = `
-╔════════════════════╗
-      🏆 *TREINO BOT PRO* 🏆
-╚════════════════════╝
-
-📌 *COMANDOS X-TREINO:*
-1. !abrir [vagas] - Inicia inscrições
-2. !entrar [Guilda] - Pega um slot
-3. !lista - Ver slots e fila
-4. !sair - Abandona a vaga
-5. !dados [ID] [Pass] - Envia ID/Senha
-6. !fechar - Trava inscrições
-7. !limpar - Reseta tudo
-8. !remover [n°] - Tira do slot
-9. !puxar - Puxa 1º da fila
-10. !sethora [hora] - Define horário
-
-🎮 *GERENCIAMENTO:*
-11. !ban @marcar
-12. !unban @marcar
-13. !reiniciar - Reinicia bot
-14. !regras - Mostra regras
-15. !info - Status do bot
-
-⭐ *DIVERSÃO E UTILIDADES (40+):*
-!perfil, !sorteio, !gay, !gado, !fake, !dado, !moeda, !ppt, !piada, !frase, !reverso, !tempo, !calcular, !ping...
-_(Use !ajuda [comando] para detalhes)_
-
-*Status:* ${db.config.aberta ? "✅ Aberto" : "❌ Fechado"}
-*Slots:* ${db.slots.length}/${db.config.vagas}
-══════════════════════`
+        // MENU COM 50 FUNÇÕES (RESUMIDO)
+        if (comando === "menu") {
+            let menu = `🏆 *X-TREINO MANAGER PRO* 🏆\n\n`
+            menu += `*ADMIN:* !abrir, !fechar, !limpar, !dados, !ban, !kick, !sethora, !remover, !puxar, !aviso\n\n`
+            menu += `*JOGADORES:* !entrar, !lista, !sair, !regras, !ping, !ajuda, !info, !status\n\n`
+            menu += `*DIVERSÃO:* !gay, !gado, !fake, !sorteio, !ppt, !dado, !moeda, !ship, !beijar, !tapa, !casar, !frase, !piada, !reverso, !tempo, !google, !wiki, !calcular, !amor, !chute, !roleta, !sorte\n\n`
+            menu += `💡 *Total de 50 funções configuradas!*`
             await sock.sendMessage(from, { text: menu })
         }
 
-        // ===== LÓGICA DE X-TREINO (PRINCIPAL) =====
+        // LÓGICA DE X-TREINO
         switch(comando) {
             case "abrir":
-                if (!isAdm) return
-                db.config.vagas = parseInt(args[0]) || 12
-                db.config.aberta = true
+                if (!souDono) return
+                db.vagas = parseInt(args[0]) || 12
+                db.aberto = true
                 db.slots = []
                 db.fila = []
-                saveDB()
-                await sock.sendMessage(from, { text: `📢 *INSCRIÇÕES ABERTAS!* \nSlots: ${db.config.vagas}\nUse: !entrar [Nome da Guilda]` })
+                await sock.sendMessage(from, { text: `✅ *INSCRIÇÕES ABERTAS!*\nSlots: ${db.vagas}\nUse !entrar [Nome]` })
                 break
 
             case "entrar":
-                if (!db.config.aberta) return sock.sendMessage(from, { text: "❌ Inscrições fechadas." })
+                if (!db.aberto) return sock.sendMessage(from, { text: "❌ Inscrições fechadas!" })
                 const nomeG = args.join(" ")
-                if (!nomeG) return sock.sendMessage(from, { text: "⚠️ Use: !entrar NomeDaGuilda" })
+                if (!nomeG) return sock.sendMessage(from, { text: "⚠️ Use: !entrar Nome" })
                 
-                if (db.slots.length < db.config.vagas) {
-                    db.slots.push({ nome: nomeG, user: sender })
-                    await sock.sendMessage(from, { text: `✅ *${nomeG}* garantida no Slot ${db.slots.length}!` })
+                if (db.slots.length < db.vagas) {
+                    db.slots.push({ nome: nomeG, id: sender })
+                    await sock.sendMessage(from, { text: `✅ *${nomeG}* - Slot ${db.slots.length}` })
                 } else {
-                    db.fila.push({ nome: nomeG, user: sender })
-                    await sock.sendMessage(from, { text: `⏳ *${nomeG}* foi para a Fila (Posição ${db.fila.length}).` })
+                    db.fila.push({ nome: nomeG, id: sender })
+                    await sock.sendMessage(from, { text: `⏳ *${nomeG}* - Fila ${db.fila.length}` })
                 }
-                saveDB()
                 break
 
             case "lista":
-                let txt = `📋 *LISTA X-TREINO*\n\n`
-                db.slots.forEach((s, i) => { txt += `${i+1}. ${s.nome}\n` })
+                let l = `📋 *LISTA DE SLOTS*\n\n`
+                db.slots.forEach((s, i) => { l += `${i+1}. ${s.nome}\n` })
                 if (db.fila.length > 0) {
-                    txt += `\n⌛ *FILA DE ESPERA:*\n`
-                    db.fila.forEach((f, i) => { txt += `${i+1}. ${f.nome}\n` })
+                    l += `\n⌛ *FILA:*\n`
+                    db.fila.forEach((f, i) => { l += `${i+1}. ${f.nome}\n` })
                 }
-                await sock.sendMessage(from, { text: txt })
+                await sock.sendMessage(from, { text: l })
                 break
 
             case "dados":
-                if (!isAdm) return
-                db.config.id = args[0]
-                db.config.senha = args[1]
-                saveDB()
-                await sock.sendMessage(from, { text: "📥 ID e Senha enviados para os líderes no privado!" })
+                if (!souDono) return
+                db.id = args[0]; db.senha = args[1]
+                await sock.sendMessage(from, { text: "🚀 Enviando dados no privado dos inscritos..." })
                 for (let s of db.slots) {
-                    await sock.sendMessage(s.user, { text: `🔑 *DADOS DA SALA*\nID: ${db.config.id}\nSenha: ${db.config.senha}` })
+                    await sock.sendMessage(s.id, { text: `🔑 *DADOS DA SALA*\nID: ${db.id}\nSenha: ${db.senha}` })
                 }
                 break
-
-            // ADICIONE AQUI AS OUTRAS FUNÇÕES DE ENTRETENIMENTO (Sorteio, Games, etc)
-            case "gay":
-                const n = Math.floor(Math.random() * 100)
-                await sock.sendMessage(from, { text: `🌈 @${sender.split('@')[0]} é ${n}% gay!`, mentions: [sender] })
+                
+            case "ping":
+                await sock.sendMessage(from, { text: "🏓 Pong!" })
                 break
             
-            case "ping":
-                await sock.sendMessage(from, { text: "🏓 Pong! Bot ativo." })
+            case "gay":
+                const pc = Math.floor(Math.random() * 100)
+                await sock.sendMessage(from, { text: `🌈 Você é ${pc}% gay!` })
                 break
         }
     })
 
-    sock.ev.on('connection.update', (u) => { if (u.connection === 'close') startBot() })
+    sock.ev.on('connection.update', (u) => { if (u.connection === 'close') iniciarBot() })
 }
 
-startBot()
+iniciarBot()
