@@ -1,37 +1,17 @@
-const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys')
-const P = require('pino')
+const { state, saveCreds } = await useMultiFileAuthState('session')
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('session')
+const sock = makeWASocket({
+  logger: P({ level: 'silent' }),
+  auth: state
+})
 
-  const sock = makeWASocket({
-    logger: P({ level: 'silent' }),
-    auth: state,
-    printQRInTerminal: false
-  })
+sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('creds.update', saveCreds)
-
-  // 🔥 GERAR CÓDIGO DE PAREAMENTO
-  if (!sock.authState.creds.registered) {
-    const numero = "55SEUNUMERO" // EX: 556799999999
-
+// 🔥 FORÇAR CÓDIGO SEMPRE QUE NÃO ESTIVER CONECTADO
+setTimeout(async () => {
+  if (!sock.user) {
+    const numero = "55SEUNUMERO" // ex: 556799999999
     const code = await sock.requestPairingCode(numero)
-    console.log(`📱 CÓDIGO DE PAREAMENTO: ${code}`)
+    console.log(`📱 CÓDIGO: ${code}`)
   }
-
-  sock.ev.on('connection.update', (update) => {
-    const { connection } = update
-
-    if (connection === 'open') {
-      console.log('✅ BOT CONECTADO COM SUCESSO')
-    }
-
-    if (connection === 'close') {
-      console.log('❌ DESCONECTADO - REINICIANDO...')
-      startBot()
-    }
-  })
-}
-
-startBot()
+}, 3000)
