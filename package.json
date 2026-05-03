@@ -1,7 +1,7 @@
 {
-  "name": "bot-xtreino",
-  "version": "1.0.0",
-  "description": "Bot WhatsApp Pareamento",
+  "name": "bot-xtreino-master",
+  "version": "1.1.0",
+  "description": "Bot Profissional de X-Treino",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,9 +10,6 @@
     "@whiskeysockets/baileys": "^6.6.0",
     "pino": "^9.0.0",
     "fs-extra": "^11.1.1",
-    "link-preview-js": "^3.0.0"
-  },
-  "engines": {
-    "node": "18.x"
+    "moment-timezone": "^0.5.43"
   }
 }
